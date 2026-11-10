@@ -220,6 +220,7 @@ def summarize_experiment(
         "ols_estimate": float(ols["estimate"]),
         "ols_p_value": float(ols["p_value"]),
         "guardrail_risk_difference": float(guardrail["risk_difference"]),
+        "guardrail_standard_error": float(guardrail["standard_error"]),
         "guardrail_ci_upper": float(guardrail["ci_upper"]),
         "guardrail_ci_lower": float(guardrail["ci_lower"]),
         "split_check": split,
@@ -253,6 +254,65 @@ def estimate_effects_by_risk_band(
     return pd.DataFrame(rows)
 
 
+def make_cli_recommendation(
+    df: pd.DataFrame,
+    outcome_col: str,
+    treatment_col: str = "treatment",
+    covariate_col: str = "pre_spend",
+    guardrail_col: str = "delinquency_60plus",
+    guardrail_margin: float = 0.005,
+    alpha: float = 0.05,
+) -> Dict[str, float | str | bool]:
+    """Apply the project decision rule for an experiment recommendation.
+
+    A simulated 'ship' recommendation requires:
+    - positive treatment effect on spend and a 95% CI excluding zero; and
+    - the one-sided 95% upper confidence bound for the treatment-minus-control
+      delinquency difference is below the predeclared guardrail threshold.
+    """
+    summary = summarize_experiment(
+        df=df,
+        outcome_col=outcome_col,
+        treatment_col=treatment_col,
+        covariate_col=covariate_col,
+        outcome_guardrail_col=guardrail_col,
+        alpha=alpha,
+    )
+
+    spend_positive = bool(summary["effect_size"] > 0.0)
+    spend_ci_excludes_zero = bool(summary["effect_ci_lower"] > 0.0)
+    guardrail_estimate = float(summary["guardrail_risk_difference"])
+    guardrail_upper = guardrail_estimate + norm.ppf(1.0 - alpha) * float(
+        summary["guardrail_standard_error"]
+    )
+
+    guardrail_ok = bool(guardrail_upper < guardrail_margin)
+
+    if spend_positive and spend_ci_excludes_zero and guardrail_ok:
+        decision = "ship"
+        reason = "Spend lift is positive with CI excluding zero, and guardrail upper bound stays below the non-inferiority margin."
+    elif spend_positive and spend_ci_excludes_zero and not guardrail_ok:
+        decision = "do_not_ship"
+        reason = "Spend effect is positive, but the guardrail upper bound exceeds the predeclared margin."
+    else:
+        decision = "inconclusive"
+        reason = "The spend interval or guardrail bound does not clearly satisfy the decision rule."
+
+    return {
+        "decision": decision,
+        "reason": reason,
+        "spend_positive": spend_positive,
+        "spend_ci_excludes_zero": spend_ci_excludes_zero,
+        "guardrail_ok": guardrail_ok,
+        "spend_effect": float(summary["effect_size"]),
+        "spend_ci_lower": float(summary["effect_ci_lower"]),
+        "spend_ci_upper": float(summary["effect_ci_upper"]),
+        "guardrail_risk_difference": float(summary["guardrail_risk_difference"]),
+        "guardrail_upper_one_sided_95": float(guardrail_upper),
+        "guardrail_margin": float(guardrail_margin),
+    }
+
+
 __all__ = [
     "sample_ratio_mismatch",
     "welch_difference_in_means",
@@ -261,4 +321,5 @@ __all__ = [
     "proportion_difference",
     "summarize_experiment",
     "estimate_effects_by_risk_band",
+    "make_cli_recommendation",
 ]

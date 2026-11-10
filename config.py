@@ -35,7 +35,8 @@ class ExperimentConfig:
     fico_score_sd: float = 42.0
 
     # Logistic PD model specification.
-    pd_intercept: float = -4.8
+    # Calibrated for the raw FICO-like score term so simulated accounts span all bands.
+    pd_intercept: float = 5.2
     pd_pre_spend_coef: float = 0.42
     pd_utilization_coef: float = 2.4
     pd_fico_coef: float = -0.013

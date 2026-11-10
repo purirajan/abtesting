@@ -33,7 +33,9 @@ def simulate_accounts(
     if n_accounts is None:
         n_accounts = config.n_accounts
 
-    rng = np.random.default_rng(random_state if random_state is not None else config.seed)
+    seed = random_state if random_state is not None else config.seed
+    rng = np.random.default_rng(seed)
+    assignment_rng = np.random.default_rng(seed + config.randomization_seed)
 
     pre_spend = rng.lognormal(
         mean=config.pre_spend_lognormal_mean,
@@ -91,7 +93,7 @@ def simulate_accounts(
     )
 
     # Randomize accounts 50/50 using a fixed seed.
-    treatment = rng.binomial(1, 0.5, size=n_accounts)
+    treatment = assignment_rng.binomial(1, 0.5, size=n_accounts)
 
     # Ground-truth effects vary by risk band, and the delinquency increase is focused on high-risk accounts.
     true_spend_effect = np.array([config.spend_effect_by_risk[band] for band in risk_band], dtype=float)
